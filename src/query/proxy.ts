@@ -128,9 +128,6 @@ const proxyClientBase = <
       },
       {
         get(_, key) {
-          if (key === "__path__") {
-            return path;
-          }
           return createProxy(context, [...path, key as string]);
         },
       }

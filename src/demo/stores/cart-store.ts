@@ -1,5 +1,4 @@
-import { prefix, store } from "../../query/suspendable";
-import { ActionRecord, Actions } from "../../query/types";
+import { prefix, local } from "../../query/suspendable";
 
 // items = items ?? JSON.parse(sessionStorage.getItem("items") ?? "[]");
 
@@ -7,8 +6,6 @@ type Timestamp = number;
 type CartItem = { id: string; quantity: Timestamp[] };
 
 type CartState = { items: CartItem[] };
-
-const name = "cart";
 
 const createCartQueries = (state: CartState) => {
   return {
@@ -18,8 +15,7 @@ const createCartQueries = (state: CartState) => {
     getItem(id: string) {
       return state.items.find((item) => item.id === id) ?? null;
     },
-    [prefix]: name,
-  } satisfies ActionRecord<typeof name>;
+  };
 };
 
 const createCartMutations = (state: CartState) => {
@@ -48,8 +44,7 @@ const createCartMutations = (state: CartState) => {
         state.items = copy;
       }
     },
-    [prefix]: "cart" as const,
-  } satisfies Actions;
+  };
 };
 
 export const createCartState = (): CartState => ({
@@ -60,7 +55,8 @@ export const createCartState = (): CartState => ({
 export const createCartClient = (state: CartState) => ({
   ...createCartQueries(state),
   ...createCartMutations(state),
-  [store]: true,
+  [prefix]: "cart" as const,
+  [local]: true,
 });
 
 // infer types

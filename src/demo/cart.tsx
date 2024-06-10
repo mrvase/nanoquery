@@ -17,7 +17,9 @@ const {
 
 export function Cart() {
   return (
-    <Suspense fallback="Loading...">
+    <Suspense
+      fallback={<div className="p-5 basis-0 grow shrink">Loading...</div>}
+    >
       <CartView />
     </Suspense>
   );

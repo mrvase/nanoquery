@@ -4,7 +4,7 @@ import {
   EventContainer,
   InferEvent,
   prefix,
-  store,
+  local,
 } from "../../query/suspendable";
 import { Actions } from "../../query/types";
 import { CartClient, CartMutations, CartQueries } from "./cart-store-api";
@@ -171,6 +171,6 @@ export const createCartClient = (
   return {
     ...createCartQueries(state, proxy(client, "cartBase")),
     ...createCartMutations(state, proxy(client, "cartBase")),
-    [store]: true,
+    [local]: true,
   };
 };

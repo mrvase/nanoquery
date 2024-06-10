@@ -44,7 +44,7 @@ export type Suspendable<T = unknown> = EventContainer<T> & {
     handleSuccess: (data: T) => void;
     handleError: (err: unknown) => void;
     retries: number;
-    [store]?: boolean;
+    [local]?: boolean;
   };
   isAsync: () => boolean | null;
   [EventDataProp]: EventData;
@@ -82,7 +82,7 @@ export const getCommitContext = () => {
 };
 
 export const prefix = Symbol("prefix");
-export const store = Symbol("store");
+export const local = Symbol("local");
 
 export function createEvent<T>(type: string[], payload: any[]): QueryEvent<T> {
   return {
@@ -133,7 +133,7 @@ export function createEventContainer<T>(
 }
 
 export function createSuspendable<T>(
-  fn: ((...payload: any) => T) & { [store]?: boolean },
+  fn: ((...payload: any) => T) & { [local]?: boolean },
   container: EventContainer<T>
 ) {
   const event = container.event;
@@ -194,7 +194,7 @@ export function createSuspendable<T>(
     get retries() {
       return data.retries;
     },
-    [store]: fn[store],
+    [local]: fn[local],
   };
 
   const promise: Suspendable<Unsuspended<any>> = {

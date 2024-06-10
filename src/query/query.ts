@@ -19,7 +19,7 @@ import {
   EventData,
   trackCommitContext,
   getCommitContext,
-  store,
+  local,
 } from "./suspendable";
 import {
   getSuspendableFromEventOrPromise,
@@ -35,6 +35,23 @@ const getQueryKey = (event: QueryEvent): readonly any[] => {
 
 const getMutationKey = (event: QueryEvent): readonly any[] => {
   return [...event.type.split("/")];
+};
+
+const getQueryOptions = <T>(
+  susp: Suspendable<T>
+): UseSuspenseQueryOptions<Awaited<T>> => {
+  const susp2 = susp.suspend();
+  return {
+    queryKey: getQueryKey(susp.event),
+    queryFn: susp2.commit as () => Awaited<T> | Promise<Awaited<T>>,
+    refetchOnMount: false,
+    ...(susp2[local]
+      ? {
+          gcTime: 0,
+          networkMode: "always",
+        }
+      : {}),
+  };
 };
 
 const subscribeInvalidation = <T>(
@@ -55,28 +72,16 @@ const subscribeInvalidation = <T>(
     return;
   }
 
-  const getQueryOptions = () => {
-    return {
-      refetchOnMount: false,
-      gcTime: 0,
-      networkMode: "always",
-    };
-  };
-
   const observer = new QueryObserver<Awaited<T>>(
     queryClient,
     queryClient.defaultQueryOptions({
-      queryKey: getQueryKey(subscribeTo.event),
-      queryFn: subscribeTo.suspend().commit as () =>
-        | Awaited<T>
-        | Promise<Awaited<T>>,
+      ...getQueryOptions(subscribeTo),
       /*
       if refetchOnMount was true, it would fetch instantly and revalidate instantly
       the very function that is right now trying to subscribe to the event,
       thereby cancelling it (by throwing an error?)
        */
       refetchOnMount: false,
-      gcTime: 0,
       meta: {
         source: invalidateEvent,
       },
@@ -144,7 +149,7 @@ const getMutationOptions = <T>(
       invalidate(mutationEvent.event);
     },
     retry: susp.retries || context?.retries,
-    ...(susp[store] ? { networkMode: "always" } : {}),
+    ...(susp[local] ? { networkMode: "always" } : {}),
   };
 };
 
@@ -191,20 +196,16 @@ export const useQuery = <T>(
     ? (event as Suspendable<T>)
     : getSuspendableFromEventOrPromise(event)[0];
 
-  const queryKey = getQueryKey(event.event);
-
   if (!isSuspendable(susp)) {
     throw susp;
   }
 
   const susp2 = susp.suspend();
-  const isStore = Boolean(susp2[store]);
 
   const options: UseSuspenseQueryOptions<Awaited<T>> = {
-    queryKey,
-    queryFn: susp2.commit as () => Awaited<T> | Promise<Awaited<T>>,
+    ...getQueryOptions(susp),
     initialData: () => {
-      if (!isStore) {
+      if (!susp2[local]) {
         return undefined;
       }
       const result = susp2.commit() as Awaited<T> | Promise<Awaited<T>>;
@@ -217,13 +218,6 @@ export const useQuery = <T>(
         return result;
       }
     },
-    refetchOnMount: false,
-    ...(isStore
-      ? {
-          gcTime: 0,
-          networkMode: "always",
-        }
-      : {}),
   };
 
   return useQueryBase<Awaited<T>>(options);
