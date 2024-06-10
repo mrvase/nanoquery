@@ -2,7 +2,6 @@ import {
   QueryClient,
   QueryObserver,
   MutationObserver,
-  QueryOptions,
   UseSuspenseQueryResult,
   useSuspenseQuery as useQueryBase,
   MutationOptions,
@@ -10,7 +9,6 @@ import {
   DefaultError,
   UseSuspenseQueryOptions,
 } from "@tanstack/react-query";
-import { useEffect } from "react";
 import {
   EventDataProp,
   EventContainer,
@@ -21,6 +19,7 @@ import {
   EventData,
   trackCommitContext,
   getCommitContext,
+  store,
 } from "./suspendable";
 import {
   getSuspendableFromEventOrPromise,
@@ -55,6 +54,14 @@ const subscribeInvalidation = <T>(
   if (observerExists) {
     return;
   }
+
+  const getQueryOptions = () => {
+    return {
+      refetchOnMount: false,
+      gcTime: 0,
+      networkMode: "always",
+    };
+  };
 
   const observer = new QueryObserver<Awaited<T>>(
     queryClient,
@@ -125,7 +132,6 @@ const getMutationOptions = <T>(
       });
     },
     onError(error) {
-      console.log("ERROR 2", error, mutationEvent.event.type);
       trackCommitContext(context, () => {
         susp.handleError(error);
       });
@@ -138,6 +144,7 @@ const getMutationOptions = <T>(
       invalidate(mutationEvent.event);
     },
     retry: susp.retries || context?.retries,
+    ...(susp[store] ? { networkMode: "always" } : {}),
   };
 };
 
@@ -146,13 +153,7 @@ export const handleMutate = async <T>(mutationEvent: Suspendable<T>) => {
 
   const observer = new MutationObserver<Awaited<T>>(
     queryClient,
-    queryClient.defaultMutationOptions({
-      ...getMutationOptions(mutationEvent),
-      onSettled() {
-        console.log("SETTLED");
-        // cleanup();
-      },
-    })
+    queryClient.defaultMutationOptions(getMutationOptions(mutationEvent))
   );
 
   return await observer.mutate();
@@ -164,18 +165,16 @@ export const mutate = <T>(event: EventContainer<T>) => {
 };
 
 export const useMutation = <T>(event: EventContainer<T>) => {
-  useEffect(() => {
-    setTimeout(() => {
-      console.log(
-        "hello",
-        queryClient.getMutationCache().find({
-          mutationKey: getMutationKey(event.event),
-        })
-      );
-    }, 500);
-  });
+  const susp = isSuspendable(event)
+    ? (event as Suspendable<T>)
+    : getSuspendableFromEventOrPromise(event)[0];
+
+  if (!isSuspendable(susp)) {
+    throw susp;
+  }
+
   return useMutationBase<Awaited<T>, DefaultError, void>({
-    ...getMutationOptions(getSuspendableFromEvent(event)[0]),
+    ...getMutationOptions(susp),
   });
 };
 
@@ -191,60 +190,41 @@ export const useQuery = <T>(
   const susp = isSuspendable(event)
     ? (event as Suspendable<T>)
     : getSuspendableFromEventOrPromise(event)[0];
-  let options: UseSuspenseQueryOptions<Awaited<T>>;
 
   const queryKey = getQueryKey(event.event);
 
   if (!isSuspendable(susp)) {
-    options = {
-      queryKey,
-      queryFn: () =>
-        susp.then(
-          () =>
-            getSuspendableFromEvent(event)[0].suspend().commit() as
-              | Awaited<T>
-              | Promise<Awaited<T>>
-        ),
-      gcTime: 0,
-      refetchOnMount: false,
-    };
-  } else {
-    const susp2 = susp.suspend();
-    options = {
-      queryKey,
-      queryFn: susp2.commit as () => Awaited<T> | Promise<Awaited<T>>,
-      initialData: () => {
-        const result = susp2.commit() as Awaited<T> | Promise<Awaited<T>>;
-        if (isSuspendableGuard(result)) {
-          return undefined;
-        } else if (result instanceof Promise) {
-          susp2.save(result);
-          return undefined;
-        } else {
-          return result;
-        }
-      },
-      gcTime: 0,
-      refetchOnMount: false,
-    };
+    throw susp;
   }
 
-  useEffect(() => {
-    const isAsync = isSuspendable(susp) ? susp.isAsync() : undefined;
+  const susp2 = susp.suspend();
+  const isStore = Boolean(susp2[store]);
 
-    const options: QueryOptions<unknown> = {};
-
-    if (isAsync) {
-      options.gcTime = 5 * 60 * 1000;
-    }
-
-    if (Object.keys(options).length) {
-      queryClient
-        .getQueryCache()
-        .find({ queryKey: getQueryKey(event.event), exact: true })
-        ?.setOptions(options);
-    }
-  }, []);
+  const options: UseSuspenseQueryOptions<Awaited<T>> = {
+    queryKey,
+    queryFn: susp2.commit as () => Awaited<T> | Promise<Awaited<T>>,
+    initialData: () => {
+      if (!isStore) {
+        return undefined;
+      }
+      const result = susp2.commit() as Awaited<T> | Promise<Awaited<T>>;
+      if (isSuspendableGuard(result)) {
+        return undefined;
+      } else if (result instanceof Promise) {
+        susp2.save(result);
+        return undefined;
+      } else {
+        return result;
+      }
+    },
+    refetchOnMount: false,
+    ...(isStore
+      ? {
+          gcTime: 0,
+          networkMode: "always",
+        }
+      : {}),
+  };
 
   return useQueryBase<Awaited<T>>(options);
 };

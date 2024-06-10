@@ -7,6 +7,7 @@ import {
   prefix,
   createSuspendable,
   EventContainer,
+  store,
 } from "./suspendable";
 import { ActionRecord } from "./types";
 
@@ -26,7 +27,7 @@ export const registerListeners = (...records: ActionRecord[]) => {
         set = new Set();
         listeners[key] = set;
       }
-      set.add(record[prop]);
+      set.add(Object.assign(record[prop], { [store]: record[store] }));
       cleanup.push(() => set.delete(record[prop]));
       if (key in awaitingPromises) {
         awaitingPromises[key].resolve(undefined);

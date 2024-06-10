@@ -1,6 +1,11 @@
 import { ProxyClient, proxy } from "../../query/proxy";
 import { invalidate, query, mutate } from "../../query/query";
-import { EventContainer, InferEvent, prefix } from "../../query/suspendable";
+import {
+  EventContainer,
+  InferEvent,
+  prefix,
+  store,
+} from "../../query/suspendable";
 import { Actions } from "../../query/types";
 import { CartClient, CartMutations, CartQueries } from "./cart-store-api";
 import { logger } from "#logger";
@@ -17,7 +22,7 @@ const createCartQueries = (
   client: ProxyClient<CartQueries, "cartBase">
 ) => {
   return {
-    async getItems() {
+    getItems() {
       const event = client.cartBase.getItems();
       const items = query(event);
 
@@ -166,5 +171,6 @@ export const createCartClient = (
   return {
     ...createCartQueries(state, proxy(client, "cartBase")),
     ...createCartMutations(state, proxy(client, "cartBase")),
+    [store]: true,
   };
 };

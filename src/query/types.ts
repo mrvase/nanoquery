@@ -1,8 +1,9 @@
-import { prefix } from "./suspendable";
+import { prefix, store } from "./suspendable";
 
-export type ActionRecord = {
+export type ActionRecord<TPrefix extends string = string> = {
   [key: string]: (...args: any[]) => any;
-  [prefix]: string;
+  [prefix]: TPrefix;
+  [store]?: boolean;
 };
 
 export type Actions<
@@ -14,4 +15,5 @@ export type Actions<
   ) => Awaited<ReturnType<T[K]>> | Promise<Awaited<ReturnType<T[K]>>>;
 } & {
   [prefix]: Prefix;
+  [store]?: boolean;
 };

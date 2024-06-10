@@ -44,6 +44,7 @@ export type Suspendable<T = unknown> = EventContainer<T> & {
     handleSuccess: (data: T) => void;
     handleError: (err: unknown) => void;
     retries: number;
+    [store]?: boolean;
   };
   isAsync: () => boolean | null;
   [EventDataProp]: EventData;
@@ -81,6 +82,7 @@ export const getCommitContext = () => {
 };
 
 export const prefix = Symbol("prefix");
+export const store = Symbol("store");
 
 export function createEvent<T>(type: string[], payload: any[]): QueryEvent<T> {
   return {
@@ -131,7 +133,7 @@ export function createEventContainer<T>(
 }
 
 export function createSuspendable<T>(
-  fn: (...payload: any) => T,
+  fn: ((...payload: any) => T) & { [store]?: boolean },
   container: EventContainer<T>
 ) {
   const event = container.event;
@@ -183,20 +185,23 @@ export function createSuspendable<T>(
     savedPromise = p;
   };
 
+  const suspended = {
+    commit,
+    save,
+    handleMutate,
+    handleSuccess,
+    handleError,
+    get retries() {
+      return data.retries;
+    },
+    [store]: fn[store],
+  };
+
   const promise: Suspendable<Unsuspended<any>> = {
     ...container,
     [EventDataProp]: container[EventDataProp] as EventData,
     suspend: () => {
-      return {
-        commit,
-        save,
-        handleMutate,
-        handleSuccess,
-        handleError,
-        get retries() {
-          return data.retries;
-        },
-      };
+      return suspended;
     },
     /*
     then<U>(callback: (value: T | Suspendable<T> | PromiseLike<T>) => U) {
