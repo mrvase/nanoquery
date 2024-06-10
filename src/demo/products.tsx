@@ -1,13 +1,12 @@
-import { Suspense, useEffect, useReducer, useState } from "react";
-import { proxyClient } from "../query/proxy";
-import { dispatch, useMutation, useQuery } from "../query/query";
-import { prefix } from "../query/suspendable";
+import { Suspense, useEffect, useReducer } from "react";
+import { proxyClient } from "../query";
+import { useMutation, useQuery } from "../query";
+import { prefix } from "../query";
 import type { CompletionClient } from "./cart";
 import type { CartClient } from "./stores/cart-store";
 import { products } from "./product-data";
-import { registerListeners } from "../query/listeners";
+import { registerListeners } from "../query";
 import { logger } from "#logger";
-import { useMutationState } from "@tanstack/react-query";
 
 type Product = { id: string; name: string };
 

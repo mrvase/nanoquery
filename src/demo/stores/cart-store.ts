@@ -1,4 +1,4 @@
-import { prefix, local } from "../../query/suspendable";
+import { prefix, local } from "../../query";
 
 // items = items ?? JSON.parse(sessionStorage.getItem("items") ?? "[]");
 

@@ -1,5 +1,5 @@
-import { prefix } from "../../query/suspendable";
-import type { Actions } from "../../query/types";
+import { prefix } from "../../query";
+import type { Actions } from "../../query";
 
 // items = items ?? JSON.parse(sessionStorage.getItem("items") ?? "[]");
 

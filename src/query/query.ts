@@ -174,7 +174,7 @@ const getMutationOptions = <T>(
   };
 };
 
-export const handleMutate = async <T>(event: Suspendable<T>) => {
+const handleMutate = async <T>(event: Suspendable<T>) => {
   const context = event[ContextProp];
   const observer = client.createMutationObserver(event);
   return await observer.mutate();

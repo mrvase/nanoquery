@@ -1,11 +1,13 @@
 import {
   type ActionRecord,
   type CommitContext,
-  ContextProp,
   type EventContainer,
-  EventDataProp,
   type Prettify,
   type QueryEvent,
+  ContextProp,
+  EventDataProp,
+  local,
+  prefix,
 } from "./types";
 
 export type EventData = {
@@ -52,9 +54,6 @@ export const trackCommitContext = <T>(
 export const getCommitContext = () => {
   return COMMIT_CONTEXT;
 };
-
-export const prefix = Symbol("prefix");
-export const local = Symbol("local");
 
 export function createEvent<T>(type: string[], payload: any[]): QueryEvent<T> {
   return {
@@ -178,13 +177,3 @@ type JoinEventType<T extends string[]> = T extends [infer A, ...infer B]
       : A
     : A
   : "";
-
-export type InferEvent<
-  T extends ActionRecord,
-  P extends string | undefined = T[typeof prefix]
-> = {
-  [K in Extract<keyof T, string>]: {
-    type: P extends string ? `${P}/${K}` : K;
-    payload: Parameters<T[K]>;
-  };
-}[Extract<keyof T, string>];

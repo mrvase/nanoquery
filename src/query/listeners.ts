@@ -4,12 +4,10 @@ import {
 } from "./resolvable-promise";
 import {
   type Suspendable,
-  prefix,
   createSuspendable,
-  local,
   isSuspendable,
 } from "./suspendable";
-import type { ActionRecord, EventContainer } from "./types";
+import { local, prefix, type ActionRecord, type EventContainer } from "./types";
 
 type Fn = (...args: any[]) => any;
 

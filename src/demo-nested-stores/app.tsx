@@ -1,8 +1,8 @@
-import { Suspense, useReducer, useState, useSyncExternalStore } from "react";
-import { registerListeners } from "../query/listeners";
-import { prefix } from "../query/suspendable";
-import { mutate, query, useQuery } from "../query/query";
-import { proxyClient } from "../query/proxy";
+import { Suspense, useReducer, useSyncExternalStore } from "react";
+import { registerListeners } from "../query";
+import { prefix } from "../query";
+import { mutate, query, useQuery } from "../query";
+import { proxyClient } from "../query";
 
 // listen to events
 

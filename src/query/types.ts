@@ -1,4 +1,5 @@
-import { prefix, local } from "./suspendable";
+export const prefix = Symbol("prefix");
+export const local = Symbol("local");
 
 export type Prettify<T> = {
   [K in keyof T]: T[K];
@@ -52,3 +53,13 @@ export type EventContainer<T = unknown> = {
   [EventDataProp]: unknown;
   [ContextProp]: CommitContext | null;
 };
+
+export type InferEvent<
+  T extends ActionRecord,
+  P extends string | undefined = T[typeof prefix]
+> = {
+  [K in Extract<keyof T, string>]: {
+    type: P extends string ? `${P}/${K}` : K;
+    payload: Parameters<T[K]>;
+  };
+}[Extract<keyof T, string>];

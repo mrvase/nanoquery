@@ -1,16 +1,16 @@
 import { logger } from "#logger";
 import {
   createEvent,
-  prefix,
   createEventContainer,
   createSuspendable,
   getCommitContext,
 } from "./suspendable";
-import type {
-  ActionRecord,
-  EventContainer,
-  Prettify,
-  UnionToIntersection,
+import {
+  prefix,
+  type ActionRecord,
+  type EventContainer,
+  type Prettify,
+  type UnionToIntersection,
 } from "./types";
 
 type WrapInPrefix<

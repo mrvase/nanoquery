@@ -1,6 +1,6 @@
-import { proxyClient } from "../query/proxy";
-import { dispatch, requestAll, useQuery } from "../query/query";
-import { prefix } from "../query/suspendable";
+import { proxyClient } from "../query";
+import { dispatch, requestAll, useQuery } from "../query";
+import { prefix } from "../query";
 import type { CartClient } from "./stores/cart-store";
 import { products } from "./product-data";
 import { Suspense } from "react";
