@@ -1,17 +1,17 @@
 import { logger } from "#logger";
 import {
-  EventContainer,
   createEvent,
   prefix,
   createEventContainer,
   createSuspendable,
   getCommitContext,
 } from "./suspendable";
-import { ActionRecord } from "./types";
-
-type Prettify<T> = {
-  [K in keyof T]: T[K];
-} & {};
+import type {
+  ActionRecord,
+  EventContainer,
+  Prettify,
+  UnionToIntersection,
+} from "./types";
 
 type WrapInPrefix<
   T extends Record<string, any>,
@@ -24,12 +24,6 @@ type WrapInPrefix<
     : never
   : U extends string
   ? { [K in U]: T }
-  : never;
-
-type UnionToIntersection<U> = (U extends any ? (x: U) => void : never) extends (
-  x: infer I
-) => void
-  ? I
   : never;
 
 type Transform<T extends Omit<ActionRecord, typeof prefix>> = {
@@ -53,23 +47,6 @@ export type ProxyClientIntersection<T extends ActionRecord> = Prettify<
     }[T[typeof prefix]]
   >
 >;
-
-/*
-export type InferEvents<
-  T extends Record<string, (...args: any) => Suspendable<any>> & {
-    [prefix]?: string[];
-  }
-> = UnionToIntersection<
-  WrapInPrefix<
-    {
-      [K in Exclude<keyof T, typeof prefix>]: (
-        ...args: Parameters<T[K]>
-      ) => FunctionalEvent<ReturnType<ReturnType<T[K]>["commit"]>>;
-    },
-    T[typeof prefix]
-  >
->;
-*/
 
 export const proxyClient = <T extends ActionRecord>() => {
   return proxyClientBase() as ProxyClientIntersection<T>;
@@ -109,14 +86,11 @@ const proxyClientBase = <
       (...args: any[]): EventContainer<any> => {
         const event = createEvent(path, args);
         const fn = record[event.type];
-        const container = createEventContainer(
-          event,
-          context ? { context } : undefined
-        );
+        const container = createEventContainer(event, context);
         logger.events(
           "EVENT:",
           event,
-          "triggered from:",
+          "\ntriggered from:",
           context?.event,
           Boolean(fn)
         );

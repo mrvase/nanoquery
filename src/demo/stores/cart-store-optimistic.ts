@@ -1,13 +1,8 @@
-import { ProxyClient, proxy } from "../../query/proxy";
+import { type ProxyClient, proxy } from "../../query/proxy";
 import { invalidate, query, mutate } from "../../query/query";
-import {
-  EventContainer,
-  InferEvent,
-  prefix,
-  local,
-} from "../../query/suspendable";
-import { Actions } from "../../query/types";
-import { CartClient, CartMutations, CartQueries } from "./cart-store-api";
+import { type InferEvent, prefix, local } from "../../query/suspendable";
+import type { Actions, EventContainer } from "../../query/types";
+import type { CartClient, CartMutations, CartQueries } from "./cart-store-api";
 import { logger } from "#logger";
 
 type CartEvent = InferEvent<CartMutations, "cartBase">;

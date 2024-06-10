@@ -1,18 +1,20 @@
 import {
-  ResolvablePromise,
+  type ResolvablePromise,
   createResolvablePromise,
 } from "./resolvable-promise";
 import {
-  Suspendable,
+  type Suspendable,
   prefix,
   createSuspendable,
-  EventContainer,
   local,
+  isSuspendable,
 } from "./suspendable";
-import { ActionRecord } from "./types";
+import type { ActionRecord, EventContainer } from "./types";
 
-const listeners: Record<string, Set<(...args: any) => any>> = {};
-const awaitingPromises: Record<string, ResolvablePromise<void>> = {};
+type Fn = (...args: any[]) => any;
+
+const listeners: Record<string, Set<Fn>> = {};
+const awaitingPromises: Record<string, ResolvablePromise<Fn>> = {};
 
 export const registerListeners = (...records: ActionRecord[]) => {
   let cleanup: (() => void)[] = [];
@@ -27,10 +29,11 @@ export const registerListeners = (...records: ActionRecord[]) => {
         set = new Set();
         listeners[key] = set;
       }
-      set.add(Object.assign(record[prop], { [local]: record[local] }));
+      const fn = Object.assign(record[prop], { [local]: record[local] });
+      set.add(fn);
       cleanup.push(() => set.delete(record[prop]));
       if (key in awaitingPromises) {
-        awaitingPromises[key].resolve(undefined);
+        awaitingPromises[key].resolve(fn);
         delete awaitingPromises[key];
       }
     }
@@ -44,25 +47,33 @@ export const registerListeners = (...records: ActionRecord[]) => {
 export const getSuspendableFromEvent = <T extends unknown>(
   container: EventContainer<T>
 ): Suspendable<T>[] => {
+  if (isSuspendable(container)) {
+    return [container as Suspendable<T>];
+  }
   const key = container.event.type;
-  return [...(listeners[key] ?? [])].map((el) =>
-    createSuspendable<T>(el, container)
+  return [...(listeners[key] ?? [])].map((fn) =>
+    createSuspendable<T>(fn, container)
   );
 };
 
 export const getSuspendableFromEventOrPromise = <T extends unknown>(
   container: EventContainer<T>
-): [Suspendable<T>, ...Suspendable<T>[]] | [Promise<void>] => {
+): [Suspendable<T>, ...Suspendable<T>[]] | [Promise<Suspendable<T>>] => {
+  if (isSuspendable(container)) {
+    return [container as Suspendable<T>];
+  }
   const key = container.event.type;
   if (listeners[key] && listeners[key].size > 0) {
     return [...listeners[key]].map((el) =>
       createSuspendable<T>(el, container)
     ) as [Suspendable<T>, ...Suspendable<T>[]];
   } else {
-    const promise = createResolvablePromise<void>();
+    const promise = createResolvablePromise<Fn>();
     if (!awaitingPromises[key]) {
       awaitingPromises[key] = promise;
     }
-    return [awaitingPromises[key]];
+    return [
+      awaitingPromises[key].then((fn) => createSuspendable(fn, container)),
+    ];
   }
 };

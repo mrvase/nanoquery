@@ -2,32 +2,122 @@ import {
   QueryClient,
   QueryObserver,
   MutationObserver,
-  UseSuspenseQueryResult,
+  type UseSuspenseQueryResult,
   useSuspenseQuery as useQueryBase,
-  MutationOptions,
+  type MutationOptions,
   useMutation as useMutationBase,
-  DefaultError,
-  UseSuspenseQueryOptions,
+  type DefaultError,
+  type UseSuspenseQueryOptions,
+  type QueryObserverResult,
 } from "@tanstack/react-query";
 import {
-  EventDataProp,
-  EventContainer,
-  QueryEvent,
-  Suspendable,
+  type Suspendable,
   isSuspendable,
   isSuspendableGuard,
-  EventData,
   trackCommitContext,
   getCommitContext,
-  local,
 } from "./suspendable";
 import {
   getSuspendableFromEventOrPromise,
   getSuspendableFromEvent,
 } from "./listeners";
 import { logger } from "#logger";
+import { partialMatchKey } from "./utils";
+import { type QueryEvent, ContextProp, type EventContainer } from "./types";
 
-export const queryClient = new QueryClient();
+const createClient = () => {
+  const queryClient = new QueryClient();
+
+  return {
+    getQuery<T>(susp: Suspendable<T>) {
+      return queryClient.getQueryCache().find<Awaited<T>>({
+        queryKey: getQueryKey(susp.event),
+        exact: true,
+      });
+    },
+    fetchQuery<T>(susp: Suspendable<T>) {
+      return queryClient.fetchQuery({
+        queryKey: getQueryKey(susp.event),
+        queryFn: susp.suspend().commit,
+      }) as Promise<Awaited<T>>;
+    },
+    getQueryObserver<T>(event: Suspendable<T>, parent: QueryEvent) {
+      return queryClient
+        .getQueryCache()
+        .find({
+          queryKey: getQueryKey(event.event),
+          exact: true,
+        })
+        ?.observers?.find((el) =>
+          partialMatchKey(el.options.meta?.parent, parent)
+        );
+    },
+    createQueryObserver<T>(
+      sub: Suspendable<T>,
+      parent: QueryEvent,
+      options?: Partial<UseSuspenseQueryOptions<Awaited<T>>>
+    ) {
+      const observer = new QueryObserver<Awaited<T>>(
+        queryClient,
+        queryClient.defaultQueryOptions({
+          ...getQueryOptions(sub),
+          meta: {
+            parent,
+          },
+          ...options,
+        })
+      );
+
+      const cleanups: (() => void)[] = [];
+
+      const destroy = () => {
+        cleanupParentListener();
+        cleanups.forEach((el) => el());
+        observer.destroy();
+      };
+
+      const cleanupParentListener = queryClient
+        .getQueryCache()
+        .subscribe((event) => {
+          if (
+            event.type === "removed" &&
+            partialMatchKey(getQueryKey(parent), event.query.queryKey)
+          ) {
+            destroy();
+          }
+        });
+
+      return {
+        subscribe(callback: (result: QueryObserverResult<Awaited<T>>) => void) {
+          // observe when sub is removed
+
+          const unsub = observer.subscribe(callback);
+          cleanups.push(unsub);
+        },
+        get data() {
+          return observer.getCurrentResult().data;
+        },
+      };
+    },
+    createMutationObserver<T>(event: Suspendable<T>) {
+      return new MutationObserver<Awaited<T>>(
+        queryClient,
+        queryClient.defaultMutationOptions(getMutationOptions(event))
+      );
+    },
+    invalidateQueries(event: QueryEvent, type: "topic" | "exact") {
+      return queryClient.invalidateQueries({
+        queryKey:
+          type === "topic"
+            ? event.type.split("/").slice(0, -1)
+            : getQueryKey(event),
+      });
+    },
+    queryClient,
+  };
+};
+
+const client = createClient();
 
 const getQueryKey = (event: QueryEvent): readonly any[] => {
   return [...event.type.split("/"), ...event.payload];
@@ -45,7 +135,8 @@ const getQueryOptions = <T>(
     queryKey: getQueryKey(susp.event),
     queryFn: susp2.commit as () => Awaited<T> | Promise<Awaited<T>>,
     refetchOnMount: false,
-    ...(susp2[local]
+    initialDataUpdatedAt: 0,
+    ...(susp2.local
       ? {
           gcTime: 0,
           networkMode: "always",
@@ -54,82 +145,13 @@ const getQueryOptions = <T>(
   };
 };
 
-const subscribeInvalidation = <T>(
-  subscribeTo: Suspendable<T>,
-  invalidateEvent: QueryEvent
-) => {
-  const observerExists = queryClient
-    .getQueryCache()
-    .find({
-      queryKey: getQueryKey(subscribeTo.event),
-      exact: true,
-    })
-    ?.observers.some((el) =>
-      partialMatchKey(el.options.meta?.source, invalidateEvent)
-    );
-
-  if (observerExists) {
-    return;
-  }
-
-  const observer = new QueryObserver<Awaited<T>>(
-    queryClient,
-    queryClient.defaultQueryOptions({
-      ...getQueryOptions(subscribeTo),
-      /*
-      if refetchOnMount was true, it would fetch instantly and revalidate instantly
-      the very function that is right now trying to subscribe to the event,
-      thereby cancelling it (by throwing an error?)
-       */
-      refetchOnMount: false,
-      meta: {
-        source: invalidateEvent,
-      },
-    })
-  );
-
-  const destroy = () => {
-    unsub1();
-    unsub2();
-    observer.destroy();
-  };
-
-  let updatedAt = 0;
-
-  const unsub1 = observer.subscribe((query) => {
-    if (query.data && query.dataUpdatedAt > updatedAt) {
-      logger.events(
-        "invalidate from observer",
-        invalidateEvent,
-        subscribeTo.event
-      );
-      updatedAt = query.dataUpdatedAt;
-      queryClient.invalidateQueries({
-        queryKey: getQueryKey(invalidateEvent),
-      });
-    }
-  });
-
-  // observe when sub is removed
-  const unsub2 = queryClient.getQueryCache().subscribe((event) => {
-    if (
-      event.type === "removed" &&
-      partialMatchKey(getQueryKey(invalidateEvent), event.query.queryKey)
-    ) {
-      destroy();
-    }
-  });
-
-  return observer.getCurrentResult().data;
-};
-
 const getMutationOptions = <T>(
-  mutationEvent: Suspendable<T>
+  event: Suspendable<T>
 ): MutationOptions<Awaited<T>, any, any, any> => {
-  const susp = mutationEvent.suspend();
-  const context = mutationEvent[EventDataProp].context;
+  const susp = event.suspend();
+  const context = event[ContextProp];
   return {
-    mutationKey: getMutationKey(mutationEvent.event),
+    mutationKey: getMutationKey(event.event),
     mutationFn: susp.commit as () => Promise<Awaited<T>>,
     onMutate() {
       trackCommitContext(context, () => {
@@ -145,45 +167,36 @@ const getMutationOptions = <T>(
       trackCommitContext(context, () => {
         susp.handleSuccess(data);
       });
-      logger.events("invalidate from success");
-      invalidate(mutationEvent.event);
+      invalidate(event.event);
     },
     retry: susp.retries || context?.retries,
-    ...(susp[local] ? { networkMode: "always" } : {}),
+    ...(susp.local ? { networkMode: "always" } : {}),
   };
 };
 
-export const handleMutate = async <T>(mutationEvent: Suspendable<T>) => {
-  const context = mutationEvent[EventDataProp].context;
-
-  const observer = new MutationObserver<Awaited<T>>(
-    queryClient,
-    queryClient.defaultMutationOptions(getMutationOptions(mutationEvent))
-  );
-
+export const handleMutate = async <T>(event: Suspendable<T>) => {
+  const context = event[ContextProp];
+  const observer = client.createMutationObserver(event);
   return await observer.mutate();
 };
 
 export const mutate = <T>(event: EventContainer<T>) => {
-  const susp = isSuspendable(event) ? [event] : getSuspendableFromEvent(event);
+  const susp = getSuspendableFromEvent(event);
   return Promise.all(susp.map((el) => handleMutate(el))).then(() => {});
 };
 
 export const useMutation = <T>(event: EventContainer<T>) => {
-  const susp = isSuspendable(event)
-    ? (event as Suspendable<T>)
-    : getSuspendableFromEventOrPromise(event)[0];
+  const susp = getSuspendableFromEventOrPromise(event)[0];
 
   if (!isSuspendable(susp)) {
     throw susp;
   }
 
-  return useMutationBase<Awaited<T>, DefaultError, void>({
-    ...getMutationOptions(susp),
-  });
+  return useMutationBase<Awaited<T>, DefaultError, void>(
+    getMutationOptions(susp),
+    client.queryClient
+  );
 };
-
-(window as any).CLIENT = queryClient;
 
 export const dispatch = (event: EventContainer) => {
   return mutate(event);
@@ -192,9 +205,7 @@ export const dispatch = (event: EventContainer) => {
 export const useQuery = <T>(
   event: EventContainer<T>
 ): UseSuspenseQueryResult<Awaited<T>> => {
-  const susp = isSuspendable(event)
-    ? (event as Suspendable<T>)
-    : getSuspendableFromEventOrPromise(event)[0];
+  const susp = getSuspendableFromEventOrPromise(event)[0];
 
   if (!isSuspendable(susp)) {
     throw susp;
@@ -205,13 +216,11 @@ export const useQuery = <T>(
   const options: UseSuspenseQueryOptions<Awaited<T>> = {
     ...getQueryOptions(susp),
     initialData: () => {
-      if (!susp2[local]) {
+      if (!susp2.local) {
         return undefined;
       }
       const result = susp2.commit() as Awaited<T> | Promise<Awaited<T>>;
-      if (isSuspendableGuard(result)) {
-        return undefined;
-      } else if (result instanceof Promise) {
+      if (result instanceof Promise) {
         susp2.save(result);
         return undefined;
       } else {
@@ -220,19 +229,17 @@ export const useQuery = <T>(
     },
   };
 
-  return useQueryBase<Awaited<T>>(options);
+  return useQueryBase<Awaited<T>>(options, client.queryClient);
 };
 
 export const invalidate = (eventFromArg?: QueryEvent) => {
   const event = getCommitContext()?.event ?? eventFromArg;
   if (event) {
-    logger.events(
-      "invalidate from context",
-      event.type.split("/").slice(0, -1)
-    );
-    queryClient.invalidateQueries({
-      queryKey: event.type.split("/").slice(0, -1),
+    logger.events("invalidate!", {
+      context: getCommitContext()?.event?.type?.split("/").slice(0, -1),
+      arg: eventFromArg?.type?.split("/").slice(0, -1),
     });
+    client.invalidateQueries(event, "topic");
   }
 };
 
@@ -247,7 +254,7 @@ const resolve = <T>(result: unknown): Promise<T> => {
 export const request = async <T>(
   event: EventContainer<T>
 ): Promise<T | undefined> => {
-  const susp = isSuspendable(event) ? [event] : getSuspendableFromEvent(event);
+  const susp = getSuspendableFromEvent(event);
   if (susp.length === 0) {
     return undefined;
   }
@@ -260,81 +267,82 @@ export const request = async <T>(
 };
 
 export const requestAll = <T>(event: EventContainer<T>) => {
-  const susp = isSuspendable(event) ? [event] : getSuspendableFromEvent(event);
+  const susp = getSuspendableFromEvent(event);
   return Promise.all(susp.map((el) => resolve<T>(el)));
 };
 
-export function partialMatchKey(a: any, b: any): boolean {
-  if (a === b) {
-    return true;
+const invalidateContextOnChange = <T>(
+  observed: Suspendable<T>,
+  context: QueryEvent
+) => {
+  if (client.getQueryObserver(observed, context)) {
+    return;
   }
 
-  if (typeof a !== typeof b) {
-    return false;
-  }
+  const observer = client.createQueryObserver(observed, context, {
+    /*
+    if refetchOnMount was true, it would fetch instantly and revalidate instantly
+    the very function that is right now trying to subscribe to the event,
+    thereby cancelling it (by throwing an error?)
+    */
+    refetchOnMount: false,
+  });
 
-  if (a && b && typeof a === "object" && typeof b === "object") {
-    return !Object.keys(b).some((key) => !partialMatchKey(a[key], b[key]));
-  }
+  let updatedAt = 0;
 
-  return false;
-}
+  observer.subscribe((query) => {
+    if (
+      query.status === "success" &&
+      query.fetchStatus === "idle" &&
+      query.dataUpdatedAt > updatedAt
+    ) {
+      logger.events(
+        "Data updated for:\n",
+        observed.event,
+        "\nInvalidates:\n",
+        context
+      );
+      updatedAt = query.dataUpdatedAt;
+      client.invalidateQueries(context, "exact");
+    }
+  });
+
+  return observer.data;
+};
 
 export const query = <T>(
   event: EventContainer<T>
 ): Promise<Awaited<T>> | Awaited<T> => {
   const get = (susp: Suspendable<T>) => {
-    const susp2 = susp.suspend();
-    const context =
-      getCommitContext() ?? (event[EventDataProp] as EventData).context;
-
-    let data: Awaited<T> | undefined;
+    const context = getCommitContext() ?? event[ContextProp];
 
     if (context) {
-      data = subscribeInvalidation(susp, context.event);
+      const data = invalidateContextOnChange(susp, context.event);
+      if (data) {
+        return data;
+      }
     }
 
-    const query = queryClient.getQueryCache().find<Awaited<T>>({
-      queryKey: getQueryKey(susp.event),
-      exact: true,
-    });
+    const query = client.getQuery(susp);
 
-    data = data ?? query?.state.data;
-
-    if (typeof data !== "undefined") {
-      return data;
+    if (query?.state.data) {
+      return query.state.data;
     }
 
-    if (query) {
-      // if status but no data, then we assume there is a promise
-      return query.promise!;
+    if (query?.promise) {
+      return query.promise;
     }
 
-    const result = susp2.commit();
-
+    const suspended = susp.suspend();
+    const result = suspended.commit();
     if (!(result instanceof Promise)) {
       return result as Awaited<T>;
     }
+    suspended.save(result);
 
-    susp2.save(result);
-
-    const promise = queryClient.fetchQuery({
-      queryKey: getQueryKey(susp.event),
-      queryFn: susp2.commit,
-    }) as Promise<Awaited<T>>;
-
-    return promise;
+    return client.fetchQuery(susp);
   };
 
-  if (isSuspendable(event)) {
-    return get(event);
-  }
-
   const susp = getSuspendableFromEventOrPromise(event)[0];
-
-  if (!isSuspendable(susp)) {
-    return susp.then(() => get(getSuspendableFromEvent(event)[0]));
-  }
-
-  return get(susp);
+  return isSuspendable(susp) ? get(susp) : susp.then(get);
 };
