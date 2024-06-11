@@ -50,6 +50,12 @@ const createClient = () => {
         queryFn: susp.suspend().commit,
       }) as Promise<Awaited<T>>;
     },
+    prefetchQuery<T>(susp: Suspendable<T>) {
+      return queryClient.prefetchQuery({
+        queryKey: getQueryKey(susp.event),
+        queryFn: susp.suspend().commit,
+      });
+    },
     getQueryObserver<T>(event: Suspendable<T>, parent: QueryEvent) {
       return queryClient
         .getQueryCache()
@@ -296,6 +302,11 @@ export const useQueries = <const T extends EventContainer<any>[]>(
   );
 
   return useQueriesBase({ queries: optionsArray }, client.queryClient);
+};
+
+export const prefetch = <T>(event: EventContainer<T>) => {
+  const susp = getSuspendableFromEvent(event);
+  return Promise.all(susp.map((el) => client.prefetchQuery(el)));
 };
 
 export const invalidate = (eventFromArg?: QueryEvent) => {
