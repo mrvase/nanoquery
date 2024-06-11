@@ -1,4 +1,4 @@
-export const prefix = Symbol("prefix");
+export const topic = Symbol("topic");
 export const local = Symbol("local");
 
 export type Prettify<T> = {
@@ -13,23 +13,23 @@ export type UnionToIntersection<U> = (
 
 export type ActionRecord<TPrefix extends string = string> = {
   [key: string]: (...args: any[]) => any;
-  [prefix]: TPrefix;
+  [topic]: TPrefix;
   [local]?: boolean;
 };
 
 export type Actions<
   T extends ActionRecord = ActionRecord,
-  Prefix extends string | undefined = T[typeof prefix]
+  Prefix extends string | undefined = T[typeof topic]
 > = {
   [K in Extract<keyof T, string>]: (
     ...input: Parameters<T[K]>
   ) => Awaited<ReturnType<T[K]>> | Promise<Awaited<ReturnType<T[K]>>>;
 } & {
-  [prefix]: Prefix;
+  [topic]: Prefix;
   [local]?: boolean;
 };
 
-declare const QueryEventType: unique symbol;
+export declare const QueryEventType: unique symbol;
 export const EventDataProp = Symbol("event-data");
 export const ContextProp = Symbol("context");
 
@@ -56,7 +56,7 @@ export type EventContainer<T = unknown> = {
 
 export type InferEvent<
   T extends ActionRecord,
-  P extends string | undefined = T[typeof prefix]
+  P extends string | undefined = T[typeof topic]
 > = {
   [K in Extract<keyof T, string>]: {
     type: P extends string ? `${P}/${K}` : K;

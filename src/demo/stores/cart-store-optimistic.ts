@@ -1,11 +1,12 @@
 import { type ProxyClient, proxy } from "../../query";
 import { invalidate, query, mutate } from "../../query";
-import { type InferEvent, prefix, local } from "../../query";
+import { type InferEvent, topic, local } from "../../query";
 import type { Actions, EventContainer } from "../../query";
-import type { CartClient, CartMutations, CartQueries } from "./cart-store-api";
+import type { CartEvents, CartQueries } from "./cart-store-api";
 import { logger } from "#logger";
+import * as cart from "./cart";
 
-type CartEvent = InferEvent<CartMutations, "cartBase">;
+type CartEvent = InferEvent<CartEvents, "cartBase">;
 
 type OptimisticCartState = {
   events: CartEvent[];
@@ -17,6 +18,7 @@ const createCartQueries = (
   client: ProxyClient<CartQueries, "cartBase">
 ) => {
   return {
+    [topic]: "cart",
     getItems() {
       const event = client.cartBase.getItems();
       const items = query(event);
@@ -30,41 +32,18 @@ const createCartQueries = (
           case "cartBase/itemAdded": {
             const input = event.payload[0];
 
-            const index = items.findIndex((el) => el.id === input.id);
-
-            if (index >= 0) {
-              const copy = [...items];
-              copy[index] = {
-                ...copy[index],
-                quantity: [
-                  ...copy[index].quantity.filter(
-                    (el) => el !== input.timestamp
-                  ),
-                  input.timestamp,
-                ],
-              };
-              return copy;
-            }
-
-            return [...items, { ...input, quantity: [input.timestamp] }];
+            return cart.addItem(items, {
+              id: input.id,
+              quantity: [input.timestamp],
+            });
           }
           case "cartBase/itemRemoved": {
             const input = event.payload[0];
 
-            const index = items.findIndex((el) => el.id === input.id);
-
-            if (index >= 0) {
-              const copy = [...items];
-              copy[index] = {
-                ...copy[index],
-                quantity: copy[index].quantity.filter(
-                  (el) => el !== input.timestamp
-                ),
-              };
-              return copy;
-            }
-
-            return items;
+            return cart.removeItem(items, {
+              id: input.id,
+              quantity: [input.timestamp],
+            });
           }
           default: {
             return items;
@@ -81,34 +60,28 @@ const createCartQueries = (
             case "cartBase/itemAdded":
               const input = event.payload[0];
 
-              if (input.id === id) {
-                return {
-                  id: input.id,
-                  quantity: [
-                    ...(item?.quantity ?? []).filter(
-                      (el) => el !== input.timestamp
-                    ),
-                    input.timestamp,
-                  ],
-                };
+              if (input.id !== id) {
+                return item;
               }
 
-              return item;
+              return cart.increaseQuantity(
+                item ?? { id: id, quantity: [] },
+                input.timestamp
+              );
             case "cartBase/itemRemoved": {
               const input = event.payload[0];
 
-              if (input.id === id) {
-                return {
-                  id: input.id,
-                  quantity: [
-                    ...(item?.quantity ?? []).filter(
-                      (el) => el !== input.timestamp
-                    ),
-                  ],
-                };
+              if (input.id !== id || !item) {
+                return item;
               }
 
-              return item;
+              const result = cart.decreaseQuantity(item, input.timestamp);
+
+              if (result.quantity.length === 0) {
+                return null;
+              }
+
+              return result;
             }
             default: {
               return item;
@@ -120,17 +93,16 @@ const createCartQueries = (
 
       return optimistic ?? item;
     },
-    [prefix]: "cart",
   } satisfies Actions<CartQueries>;
 };
 
-const createCartMutations = (
+const createCartEvents = (
   state: OptimisticCartState,
-  client: ProxyClient<CartMutations, "cartBase">
+  client: ProxyClient<CartEvents, "cartBase">
 ) => {
   return {
+    [topic]: "cart",
     itemAdded(item: { id: string; timestamp: number }) {
-      logger.events("ITEM ADDED");
       const promise = client.cartBase.itemAdded(item);
       return mutate(state.track(promise));
     },
@@ -138,8 +110,7 @@ const createCartMutations = (
       const promise = client.cartBase.itemRemoved(item);
       return mutate(state.track(promise));
     },
-    [prefix]: "cart",
-  } satisfies Actions<CartMutations>;
+  } satisfies Actions<CartEvents>;
 };
 
 export const createCartState = (): OptimisticCartState => ({
@@ -161,11 +132,11 @@ export const createCartState = (): OptimisticCartState => ({
 // create client
 export const createCartClient = (
   state: OptimisticCartState,
-  client: CartClient
+  client: CartQueries & CartEvents
 ) => {
   return {
-    ...createCartQueries(state, proxy(client, "cartBase")),
-    ...createCartMutations(state, proxy(client, "cartBase")),
     [local]: true,
+    ...createCartQueries(state, proxy(client, "cartBase")),
+    ...createCartEvents(state, proxy(client, "cartBase")),
   };
 };

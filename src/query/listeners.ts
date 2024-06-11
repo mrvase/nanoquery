@@ -7,7 +7,7 @@ import {
   createSuspendable,
   isSuspendable,
 } from "./suspendable";
-import { local, prefix, type ActionRecord, type EventContainer } from "./types";
+import { local, topic, type ActionRecord, type EventContainer } from "./types";
 
 type Fn = (...args: any[]) => any;
 
@@ -18,7 +18,7 @@ export const registerListeners = (...records: ActionRecord[]) => {
   let cleanup: (() => void)[] = [];
 
   records.forEach((record) => {
-    const getKey = (prop: string) => [record[prefix], prop].join("/");
+    const getKey = (prop: string) => [record[topic], prop].join("/");
 
     for (const prop of Object.keys(record)) {
       const key = getKey(prop);

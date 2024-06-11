@@ -1,12 +1,12 @@
 import { Suspense, useEffect, useReducer } from "react";
 import { proxyClient } from "../query";
 import { useMutation, useQuery } from "../query";
-import { prefix } from "../query";
+import { topic } from "../query";
 import type { CompletionClient } from "./cart";
-import type { CartClient } from "./stores/cart-store";
 import { products } from "./product-data";
 import { registerListeners } from "../query";
 import { logger } from "#logger";
+import type { CartEvents, CartQueries } from "./stores/cart-store";
 
 type Product = { id: string; name: string };
 
@@ -20,7 +20,7 @@ export function Products() {
   );
 }
 
-const { cart } = proxyClient<CartClient>();
+const { cart } = proxyClient<CartEvents | CartQueries>();
 
 function ProductCard({ data }: { data: Product }) {
   const [show, toggleShow] = useReducer((show) => !show, true);
@@ -77,7 +77,7 @@ function OnCompletePlugin({ id, name }: { id: string; name: string }) {
 
     return registerListeners({
       isCompleted,
-      [prefix]: "checkout/completion",
+      [topic]: "checkout/completion",
     } satisfies CompletionClient);
   }, [name, quantity]);
 

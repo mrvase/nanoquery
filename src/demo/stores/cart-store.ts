@@ -1,14 +1,12 @@
-import { prefix, local } from "../../query";
+import { topic, local } from "../../query";
+import type { Cart, Timestamp } from "./cart";
+import * as cart from "./cart";
 
 // items = items ?? JSON.parse(sessionStorage.getItem("items") ?? "[]");
 
-type Timestamp = number;
-type CartItem = { id: string; quantity: Timestamp[] };
-
-type CartState = { items: CartItem[] };
-
-const createCartQueries = (state: CartState) => {
+const createCartQueries = (state: Cart) => {
   return {
+    [topic]: "cart" as const,
     getItems() {
       return state.items;
     },
@@ -18,48 +16,35 @@ const createCartQueries = (state: CartState) => {
   };
 };
 
-const createCartMutations = (state: CartState) => {
+const createCartEvents = (state: Cart) => {
   return {
+    [topic]: "cart" as const,
     itemAdded(item: { id: string; timestamp: Timestamp }) {
-      const index = state.items.findIndex((el) => el.id === item.id);
-      if (index >= 0) {
-        const copy = [...state.items];
-        copy[index] = {
-          ...copy[index],
-          quantity: [...copy[index].quantity, item.timestamp],
-        };
-        state.items = copy;
-      } else {
-        state.items = [...state.items, { ...item, quantity: [item.timestamp] }];
-      }
+      state.items = cart.addItem(state.items, {
+        id: item.id,
+        quantity: [item.timestamp, item.timestamp + 1],
+      });
     },
     itemRemoved(item: { id: string; timestamp: Timestamp }) {
-      const index = state.items.findIndex((el) => el.id === item.id);
-      if (index >= 0) {
-        const copy = [...state.items];
-        copy[index] = {
-          ...copy[index],
-          quantity: copy[index].quantity.filter((el) => el !== item.timestamp),
-        };
-        state.items = copy;
-      }
+      state.items = cart.removeItem(state.items, {
+        id: item.id,
+        quantity: [item.timestamp],
+      });
     },
   };
 };
 
-export const createCartState = (): CartState => ({
+export const createCartState = (): Cart => ({
   items: [],
 });
 
 // create procedures from state
-export const createCartClient = (state: CartState) => ({
-  ...createCartQueries(state),
-  ...createCartMutations(state),
-  [prefix]: "cart" as const,
+export const createCartClient = (state: Cart) => ({
   [local]: true,
+  ...createCartQueries(state),
+  ...createCartEvents(state),
 });
 
 // infer types
 export type CartQueries = ReturnType<typeof createCartQueries>;
-export type CartMutations = ReturnType<typeof createCartMutations>;
-export type CartClient = ReturnType<typeof createCartClient>;
+export type CartEvents = ReturnType<typeof createCartEvents>;

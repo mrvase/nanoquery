@@ -3,12 +3,16 @@ import {
   QueryObserver,
   MutationObserver,
   type UseSuspenseQueryResult,
-  useSuspenseQuery as useQueryBase,
+  useQuery as useQueryBase,
+  useSuspenseQuery as useSuspenseQueryBase,
+  useQueries as useQueriesBase,
   type MutationOptions,
   useMutation as useMutationBase,
   type DefaultError,
   type UseSuspenseQueryOptions,
   type QueryObserverResult,
+  type UseQueryOptions,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import {
   type Suspendable,
@@ -23,7 +27,12 @@ import {
 } from "./listeners";
 import { logger } from "#logger";
 import { partialMatchKey } from "./utils";
-import { type QueryEvent, ContextProp, type EventContainer } from "./types";
+import {
+  type QueryEvent,
+  ContextProp,
+  type EventContainer,
+  QueryEventType,
+} from "./types";
 
 const createClient = () => {
   const queryClient = new QueryClient();
@@ -202,8 +211,28 @@ export const dispatch = (event: EventContainer) => {
   return mutate(event);
 };
 
+const getInitialData = <T>(susp: Suspendable<T>) => {
+  const susp2 = susp.suspend();
+  if (!susp2.local) {
+    return undefined;
+  }
+  const result = susp2.commit() as Awaited<T> | Promise<Awaited<T>>;
+  if (result instanceof Promise) {
+    susp2.save(result);
+    return undefined;
+  } else {
+    return result;
+  }
+};
+
 export const useQuery = <T>(
-  event: EventContainer<T>
+  event: EventContainer<T>,
+  optionsFromArg?: Partial<
+    Omit<
+      UseQueryOptions<Awaited<T>>,
+      "queryKey" | "queryFn" | "enabled" | "throwOnError"
+    >
+  >
 ): UseSuspenseQueryResult<Awaited<T>> => {
   const susp = getSuspendableFromEventOrPromise(event)[0];
 
@@ -211,25 +240,62 @@ export const useQuery = <T>(
     throw susp;
   }
 
-  const susp2 = susp.suspend();
-
   const options: UseSuspenseQueryOptions<Awaited<T>> = {
     ...getQueryOptions(susp),
-    initialData: () => {
-      if (!susp2.local) {
-        return undefined;
-      }
-      const result = susp2.commit() as Awaited<T> | Promise<Awaited<T>>;
-      if (result instanceof Promise) {
-        susp2.save(result);
-        return undefined;
-      } else {
-        return result;
-      }
-    },
+    ...optionsFromArg,
+    initialData: () => getInitialData(susp),
   };
 
-  return useQueryBase<Awaited<T>>(options, client.queryClient);
+  const useHook = optionsFromArg?.placeholderData
+    ? useQueryBase
+    : useSuspenseQueryBase;
+  return useHook<Awaited<T>>(
+    options,
+    client.queryClient
+  ) as UseSuspenseQueryResult<Awaited<T>>;
+};
+
+type UnwrapContainers<T extends EventContainer<any>[]> = any[] extends T
+  ? UseQueryResult<T[number]["event"][typeof QueryEventType]>[]
+  : T extends [infer Head, ...infer Tail]
+  ? Head extends EventContainer<any>
+    ? [
+        UseQueryResult<Head["event"][typeof QueryEventType]>,
+        ...(Tail extends EventContainer<any>[] ? UnwrapContainers<Tail> : [])
+      ]
+    : []
+  : [];
+
+export const useQueries = <const T extends EventContainer<any>[]>(
+  events: T,
+  optionsFromArg?: Partial<
+    Omit<
+      UseQueryOptions<Awaited<T>>,
+      "queryKey" | "queryFn" | "enabled" | "throwOnError"
+    >
+  >
+): UnwrapContainers<T> => {
+  const suspsPromises = events.map(
+    (event) => getSuspendableFromEventOrPromise(event)[0]
+  );
+
+  if (suspsPromises.some((el) => !isSuspendable(el))) {
+    throw Promise.all(suspsPromises);
+  }
+
+  const susps = suspsPromises as Suspendable<T>[];
+
+  const optionsArray = susps.map(
+    (susp): UseSuspenseQueryOptions<Awaited<T>> => {
+      return {
+        ...getQueryOptions(susp),
+        ...optionsFromArg,
+        initialData: () => getInitialData(susp),
+      };
+    }
+  );
+
+  return useQueriesBase({ queries: optionsArray }, client.queryClient);
 };
 
 export const invalidate = (eventFromArg?: QueryEvent) => {

@@ -6,7 +6,7 @@ import {
   getCommitContext,
 } from "./suspendable";
 import {
-  prefix,
+  topic,
   type ActionRecord,
   type EventContainer,
   type Prettify,
@@ -26,7 +26,7 @@ type WrapInPrefix<
   ? { [K in U]: T }
   : never;
 
-type Transform<T extends Omit<ActionRecord, typeof prefix>> = {
+type Transform<T extends Omit<ActionRecord, typeof topic>> = {
   [K in keyof T]: (
     ...args: Parameters<T[K]>
   ) => EventContainer<ReturnType<T[K]>>;
@@ -34,17 +34,19 @@ type Transform<T extends Omit<ActionRecord, typeof prefix>> = {
 
 export type ProxyClient<
   T extends ActionRecord,
-  P extends string = T[typeof prefix]
-> = WrapInPrefix<Transform<Omit<T, typeof prefix>>, P>;
+  P extends string = T[typeof topic]
+> = WrapInPrefix<Transform<Omit<T, typeof topic>>, P>;
+
+type IsApiRecord<T> = T extends ActionRecord ? T : never;
 
 export type ProxyClientIntersection<T extends ActionRecord> = Prettify<
   UnionToIntersection<
     {
-      [Key in T[typeof prefix]]: ProxyClient<
-        Extract<T, { [prefix]: Key }>,
+      [Key in T[typeof topic]]: ProxyClient<
+        IsApiRecord<UnionToIntersection<Extract<T, { [topic]: Key }>>>,
         Key
       >;
-    }[T[typeof prefix]]
+    }[T[typeof topic]]
   >
 >;
 
@@ -54,7 +56,7 @@ export const proxyClient = <T extends ActionRecord>() => {
 
 export const proxy = <
   T extends ActionRecord,
-  U extends string = T[typeof prefix]
+  U extends string = T[typeof topic]
 >(
   client: T,
   pfx?: U
@@ -64,7 +66,7 @@ export const proxy = <
 
 const proxyClientBase = <
   T extends ActionRecord,
-  U extends string = T[typeof prefix]
+  U extends string = T[typeof topic]
 >(
   client?: T,
   pfx?: U
@@ -72,7 +74,7 @@ const proxyClientBase = <
   const record: Record<string, (...args: any) => any> = {};
   if (client) {
     for (const prop of Object.keys(client)) {
-      record[[pfx ?? client[prefix], prop].join("/")] = client[prop];
+      record[[pfx ?? client[topic], prop].join("/")] = client[prop];
     }
   }
 

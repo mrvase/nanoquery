@@ -1,13 +1,13 @@
 import { Suspense, useReducer, useSyncExternalStore } from "react";
 import { registerListeners } from "../query";
-import { prefix } from "../query";
+import { topic } from "../query";
 import { mutate, query, useQuery } from "../query";
 import { proxyClient } from "../query";
 
 // listen to events
 
 const store1Client = (value = 1) => ({
-  [prefix]: "store1" as const,
+  [topic]: "store1" as const,
   getValue: () => {
     console.log("get!", value);
     return value;
@@ -28,7 +28,7 @@ const { store1, store2, store3, store4 } = proxyClient<
 >();
 
 const store2Client = {
-  [prefix]: "store2" as const,
+  [topic]: "store2" as const,
   getValue: async () => {
     const { store1 } = proxyClient<Store1>();
     const value = await query(store1.getValue());
@@ -38,7 +38,7 @@ const store2Client = {
 type Store2 = typeof store2Client;
 
 const store3Client = {
-  [prefix]: "store3" as const,
+  [topic]: "store3" as const,
   getValue: () => {
     const value = store2.getValue();
     return query(value);
@@ -47,7 +47,7 @@ const store3Client = {
 type Store3 = typeof store3Client;
 
 const store4Client = {
-  [prefix]: "store4" as const,
+  [topic]: "store4" as const,
   getValue: () => {
     const value = query(store3.getValue());
     return value;

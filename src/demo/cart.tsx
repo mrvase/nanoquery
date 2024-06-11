@@ -1,19 +1,19 @@
-import { proxyClient } from "../query";
+import { proxyClient, useQueries } from "../query";
 import { dispatch, requestAll, useQuery } from "../query";
-import { prefix } from "../query";
-import type { CartClient } from "./stores/cart-store";
+import { topic } from "../query";
 import { products } from "./product-data";
 import { Suspense } from "react";
+import type { CartEvents, CartQueries } from "./stores/cart-store";
 
 export type CompletionClient = {
   isCompleted(): Promise<string>;
-  [prefix]: "checkout/completion";
+  [topic]: "checkout/completion";
 };
 
 const {
   cart,
   checkout: { completion },
-} = proxyClient<CartClient | CompletionClient>();
+} = proxyClient<CartQueries | CartEvents | CompletionClient>();
 
 export function Cart() {
   return (

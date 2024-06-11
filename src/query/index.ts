@@ -1,4 +1,4 @@
-export { prefix, local } from "./types";
+export { topic, local } from "./types";
 export type {
   ActionRecord,
   Actions,
@@ -21,4 +21,5 @@ export {
   requestAll,
   useMutation,
   useQuery,
+  useQueries,
 } from "./query";

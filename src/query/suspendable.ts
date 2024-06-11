@@ -7,7 +7,7 @@ import {
   ContextProp,
   EventDataProp,
   local,
-  prefix,
+  topic,
 } from "./types";
 
 export type EventData = {
@@ -164,8 +164,8 @@ export const createClient = <T extends ActionRecord, const U extends string>(
 
   return {
     ...client,
-    [prefix]: options.prefix,
-  } as Prettify<T & { [prefix]: U }>;
+    [topic]: options.prefix,
+  } as Prettify<T & { [topic]: U }>;
 };
 
 type JoinEventType<T extends string[]> = T extends [infer A, ...infer B]

@@ -11,6 +11,7 @@ specifiers:
   eslint: ^8.57.0
   eslint-plugin-react-hooks: ^4.6.0
   eslint-plugin-react-refresh: ^0.4.6
+  immer: ^10.1.1
   postcss: ^8.4.38
   react: ^18.2.0
   react-dom: ^18.2.0
@@ -20,6 +21,7 @@ specifiers:
 
 dependencies:
   '@tanstack/react-query': 5.40.0_react@18.3.1
+  immer: 10.1.1
   react: 18.3.1
   react-dom: 18.3.1_react@18.3.1
 
@@ -1565,6 +1567,10 @@ packages:
     resolution: {integrity: sha512-5Fytz/IraMjqpwfd34ke28PTVMjZjJG2MPn5t7OE4eUCUNf8BAa7b5WUS9/Qvr6mwOQS7Mk6vdsMno5he+T8Xw==}
     engines: {node: '>= 4'}
     dev: true
+
+  /immer/10.1.1:
+    resolution: {integrity: sha512-s2MPrmjovJcoMaHtx6K11Ra7oD05NT97w1IC5zpMkT6Atjr7H8LjaDd81iIxUYpMKSRRNMJE703M1Fhr/TctHw==}
+    dev: false
 
   /import-fresh/3.3.0:
     resolution: {integrity: sha512-veYYhQa+D1QBKznvhUHxb8faxlrwUnxseDAbAp457E0wLNio2bOSKnjYDhMj+YiAq61xrMGhQk9iXVk5FzgQMw==}

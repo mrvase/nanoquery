@@ -1,15 +1,15 @@
-import { prefix } from "../../query";
+import { topic } from "../../query";
 import type { Actions } from "../../query";
+import * as cart from "./cart";
+import type { Cart } from "./cart";
 
 // items = items ?? JSON.parse(sessionStorage.getItem("items") ?? "[]");
 
 type Timestamp = number;
-type CartItem = { id: string; quantity: Timestamp[] };
 
-type CartState = { items: CartItem[] };
-
-const createCartQueries = (state: CartState) => {
+const createCartQueries = (state: Cart) => {
   return {
+    [topic]: "cart" as const,
     getItems() {
       return delay(() => state.items, 500);
     },
@@ -19,13 +19,13 @@ const createCartQueries = (state: CartState) => {
         500
       );
     },
-    [prefix]: "cart" as const,
   } satisfies Actions;
 };
 
 let i = 1;
-const createCartMutations = (state: CartState) => {
+const createCartEvents = (state: Cart) => {
   return {
+    [topic]: "cart" as const,
     async itemAdded(item: { id: string; timestamp: Timestamp }): Promise<void> {
       if (i++ % 4 === 0) {
         return delay(
@@ -33,56 +33,35 @@ const createCartMutations = (state: CartState) => {
           1000
         );
       }
-      const index = state.items.findIndex((el) => el.id === item.id);
-      if (index >= 0) {
-        const copy = [...state.items];
-        copy[index] = {
-          ...copy[index],
-          quantity: [
-            ...copy[index].quantity,
-            item.timestamp,
-            item.timestamp + 1,
-          ],
-        };
-        state.items = copy;
-      } else {
-        state.items = [...state.items, { ...item, quantity: [item.timestamp] }];
-      }
+      state.items = cart.addItem(state.items, {
+        id: item.id,
+        quantity: [item.timestamp, item.timestamp + 1],
+      });
+      console.log("item added", state);
       return delay(() => {}, 500);
     },
     async itemRemoved(item: { id: string; timestamp: Timestamp }) {
       if (i++ % 4 === 0) {
         return delay(() => Promise.reject<void>("Failed getting item"), 500);
       }
-      const index = state.items.findIndex((el) => el.id === item.id);
-      if (index >= 0) {
-        const copy = [...state.items];
-        copy[index] = {
-          ...copy[index],
-          quantity: copy[index].quantity.filter((el) => el !== item.timestamp),
-        };
-        state.items = copy;
-      }
+      state.items = cart.removeItem(state.items, {
+        id: item.id,
+        quantity: [item.timestamp],
+      });
       return delay(() => {}, 500);
     },
-    [prefix]: "cart" as const,
   } satisfies Actions;
 };
 
-export const createCartState = (): CartState => ({
-  items: [],
-});
-
 // create procedures from state
-export const createCartClient = (state: CartState) => ({
+export const createCartClient = (state: Cart) => ({
   ...createCartQueries(state),
-  ...createCartMutations(state),
+  ...createCartEvents(state),
 });
 
 // infer types
 export type CartQueries = ReturnType<typeof createCartQueries>;
-export type CartMutations = ReturnType<typeof createCartMutations>;
-export type CartClient = ReturnType<typeof createCartClient>;
+export type CartEvents = ReturnType<typeof createCartEvents>;
 
 /**
  * helpers
